@@ -1,0 +1,55 @@
+---
+# Common role - tasks performed on all servers
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install common packages
+  package:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Configure timezone
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Configure NTP
+  apt:
+    name: chrony
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Start and enable chrony
+  service:
+    name: chrony
+    state: started
+    enabled: yes
+
+- name: Create admin user
+  user:
+    name: "{{ admin_user }}"
+    groups: "{{ admin_groups }}"
+    shell: /bin/bash
+    create_home: yes
+
+- name: Set up SSH key for admin user
+  authorized_key:
+    user: "{{ admin_user }}"
+    key: "{{ admin_ssh_key }}"
+  when: admin_ssh_key is defined
+
+- name: Configure firewall
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Enable firewall
+  ufw:
+    state: enabled

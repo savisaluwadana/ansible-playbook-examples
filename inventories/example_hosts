@@ -1,0 +1,28 @@
+# Basic Inventory File
+# 
+# This is a simple inventory for basic examples
+# Replace IP addresses with your actual servers
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_python_interpreter=/usr/bin/python3
+
+[webservers]
+web1.example.com ansible_host=192.168.1.10
+web2.example.com ansible_host=192.168.1.11
+
+[databases]
+db1.example.com ansible_host=192.168.1.20
+
+[appservers]
+app1.example.com ansible_host=192.168.1.30
+app2.example.com ansible_host=192.168.1.31
+
+# Group variables can be defined here or in group_vars/
+[webservers:vars]
+http_port=80
+https_port=443
+
+[databases:vars]
+db_port=5432

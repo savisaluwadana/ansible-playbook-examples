@@ -1,0 +1,7 @@
+---
+# Default variables for webserver role
+webserver_type: "nginx"
+webserver_service: "{{ 'nginx' if webserver_type == 'nginx' else 'apache2' }}"
+document_root: "/var/www/html"
+site_name: "My Website"
+vhost_config_path: "/etc/nginx/sites-available/default"

@@ -1,0 +1,258 @@
+---
+# Nginx Web Server Setup Playbook
+#
+# Description:
+#   Complete Nginx web server installation and configuration
+#   Includes SSL/TLS setup, virtual hosts, and optimization
+#
+# Prerequisites:
+#   - Target Ubuntu/Debian server
+#   - Domain name configured (or use IP)
+#   - Sudo access
+#
+# Usage:
+#   ansible-playbook -i inventories/intermediate_hosts web-server/nginx-setup.yml \
+#     -e "server_name=example.com"
+#
+# Expected Output:
+#   - Nginx installed and configured
+#   - Virtual host configured
+#   - SSL certificate generated (self-signed for testing)
+#   - Firewall rules configured
+#   - Website accessible via HTTP/HTTPS
+#
+# Key Concepts:
+#   - Template usage for configuration files
+#   - Handlers for service management
+#   - SSL/TLS certificate generation
+#   - Firewall configuration
+#   - Static file serving
+
+- name: Setup Nginx web server with SSL
+  hosts: webservers
+  become: true
+  
+  vars:
+    server_name: "{{ ansible_default_ipv4.address }}"
+    document_root: /var/www/{{ server_name }}
+    ssl_certificate_path: /etc/nginx/ssl/{{ server_name }}.crt
+    ssl_certificate_key_path: /etc/nginx/ssl/{{ server_name }}.key
+    enable_ssl: true
+    worker_processes: "{{ ansible_processor_cores }}"
+    worker_connections: 1024
+  
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+    
+    - name: Reload nginx
+      service:
+        name: nginx
+        state: reloaded
+    
+    - name: Reload ufw
+      ufw:
+        state: reloaded
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags:
+        - install
+    
+    - name: Install Nginx and dependencies
+      apt:
+        name:
+          - nginx
+          - openssl
+          - ufw
+        state: present
+      tags:
+        - install
+    
+    - name: Create SSL directory
+      file:
+        path: /etc/nginx/ssl
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: enable_ssl
+      tags:
+        - ssl
+    
+    - name: Generate self-signed SSL certificate
+      command: >
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048
+        -keyout {{ ssl_certificate_key_path }}
+        -out {{ ssl_certificate_path }}
+        -subj "/C=US/ST=State/L=City/O=Organization/CN={{ server_name }}"
+      args:
+        creates: "{{ ssl_certificate_path }}"
+      when: enable_ssl
+      tags:
+        - ssl
+    
+    - name: Set SSL certificate permissions
+      file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - "{{ ssl_certificate_path }}"
+        - "{{ ssl_certificate_key_path }}"
+      when: enable_ssl
+      tags:
+        - ssl
+    
+    - name: Create document root directory
+      file:
+        path: "{{ document_root }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+      tags:
+        - config
+    
+    - name: Create sample index.html
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Welcome to {{ server_name }}</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 50px; }
+                  h1 { color: #009639; }
+                  .info { background: #f4f4f4; padding: 20px; border-radius: 5px; }
+              </style>
+          </head>
+          <body>
+              <h1>Welcome to {{ server_name }}</h1>
+              <div class="info">
+                  <h2>Server Information</h2>
+                  <p><strong>Hostname:</strong> {{ ansible_hostname }}</p>
+                  <p><strong>IP Address:</strong> {{ ansible_default_ipv4.address }}</p>
+                  <p><strong>OS:</strong> {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+                  <p><strong>Web Server:</strong> Nginx</p>
+                  <p><strong>SSL Enabled:</strong> {{ enable_ssl }}</p>
+              </div>
+              <p>This page is served by Nginx configured via Ansible.</p>
+          </body>
+          </html>
+        dest: "{{ document_root }}/index.html"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      tags:
+        - content
+    
+    - name: Configure nginx.conf
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+        validate: 'nginx -t -c %s'
+      notify: Reload nginx
+      tags:
+        - config
+    
+    - name: Configure virtual host
+      template:
+        src: vhost.conf.j2
+        dest: /etc/nginx/sites-available/{{ server_name }}.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload nginx
+      tags:
+        - config
+    
+    - name: Enable virtual host
+      file:
+        src: /etc/nginx/sites-available/{{ server_name }}.conf
+        dest: /etc/nginx/sites-enabled/{{ server_name }}.conf
+        state: link
+      notify: Reload nginx
+      tags:
+        - config
+    
+    - name: Remove default site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+      tags:
+        - config
+    
+    - name: Test nginx configuration
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+      tags:
+        - verify
+    
+    - name: Display nginx test results
+      debug:
+        var: nginx_test.stderr_lines
+      tags:
+        - verify
+    
+    - name: Ensure nginx is started and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      tags:
+        - service
+    
+    - name: Configure UFW firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '80'
+        - '443'
+        - '22'
+      notify: Reload ufw
+      tags:
+        - firewall
+    
+    - name: Enable UFW firewall
+      ufw:
+        state: enabled
+      tags:
+        - firewall
+    
+    - name: Wait for nginx to be accessible
+      wait_for:
+        port: 80
+        timeout: 30
+      tags:
+        - verify
+    
+    - name: Display access information
+      debug:
+        msg:
+          - "Nginx is successfully configured!"
+          - "HTTP URL: http://{{ server_name }}"
+          - "HTTPS URL: https://{{ server_name }}"
+          - "Document root: {{ document_root }}"
+      tags:
+        - info
+
+# Use Cases:
+#   - Web application hosting
+#   - Static website deployment
+#   - Reverse proxy setup
+#   - Load balancer configuration
+#   - SSL/TLS termination

@@ -1,0 +1,44 @@
+---
+# Database role - tasks for database servers
+- name: Install PostgreSQL
+  apt:
+    name:
+      - postgresql
+      - postgresql-contrib
+      - python3-psycopg2
+    state: present
+
+- name: Ensure PostgreSQL is started and enabled
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Create database
+  postgresql_db:
+    name: "{{ db_name }}"
+    encoding: UTF-8
+  become_user: postgres
+
+- name: Create database user
+  postgresql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    role_attr_flags: CREATEDB
+  become_user: postgres
+  no_log: true
+
+- name: Grant privileges
+  postgresql_privs:
+    database: "{{ db_name }}"
+    roles: "{{ db_user }}"
+    type: database
+    privs: ALL
+  become_user: postgres
+
+- name: Configure firewall for PostgreSQL
+  ufw:
+    rule: allow
+    port: "5432"
+    proto: tcp
+  when: allow_remote_connections

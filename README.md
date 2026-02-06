@@ -1,6 +1,183 @@
-# Deploying Mezzanine with Ansible
+# Ansible Playbook Examples
 
-A complete Ansible playbook for deploying [Mezzanine CMS](http://mezzanine.jupo.org/) to an Ubuntu server, based on Chapter 7 of "Ansible: Up and Running, 3rd Edition".
+A comprehensive collection of Ansible playbooks, examples, and theory documentation to help you learn and master Ansible automation. From basic system administration to advanced deployment strategies.
+
+## 📚 Table of Contents
+
+1. [Quick Start](#-quick-start)
+2. [Ansible Theory](#-ansible-theory)
+3. [Examples by Difficulty](#-examples-by-difficulty)
+   - [Basic Examples](#basic-examples)
+   - [Intermediate Examples](#intermediate-examples)
+   - [Advanced Examples](#advanced-examples)
+4. [Mezzanine CMS Deployment](#-mezzanine-cms-deployment-example)
+5. [Project Structure](#-project-structure)
+6. [Contributing](#-contributing)
+7. [Additional Resources](#-additional-resources)
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+**On Your Control Machine:**
+- Ansible 2.9 or later
+- Python 3.8+
+- SSH access to target hosts
+
+**On Target Hosts:**
+- Ubuntu 20.04+ or equivalent Linux distribution
+- Python 3
+- SSH server running
+
+### Installation
+
+Install Ansible:
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install ansible
+
+# macOS
+brew install ansible
+
+# pip
+pip install ansible
+```
+
+### Your First Playbook
+
+1. Clone this repository:
+```bash
+git clone https://github.com/savisaluwadana/ansible-playbook-examples.git
+cd ansible-playbook-examples
+```
+
+2. Update inventory with your hosts:
+```bash
+cp inventories/example_hosts inventories/my_hosts
+# Edit inventories/my_hosts with your server details
+```
+
+3. Run a basic example:
+```bash
+ansible-playbook -i inventories/my_hosts examples/basic/system-update-playbook.yml
+```
+
+---
+
+## 📖 Ansible Theory
+
+Before diving into examples, we recommend reading our comprehensive Ansible theory documentation:
+
+**[📘 ANSIBLE_THEORY.md](ANSIBLE_THEORY.md)** - Complete guide covering:
+- Ansible Architecture (Control nodes, managed nodes, inventory, modules, plugins)
+- Core Concepts (Playbooks, tasks, handlers, roles, variables, facts)
+- Conditionals and Loops
+- Templates (Jinja2)
+- Vault for Secrets Management
+- Inventory Management (Static and Dynamic)
+- Ansible Modules
+- Best Practices (Idempotency, organization, security, testing)
+- Ansible Galaxy
+
+---
+
+## 📁 Examples by Difficulty
+
+### Basic Examples
+
+Perfect for beginners learning Ansible fundamentals.
+
+#### 🔧 [System Update and Package Management](examples/basic/system-update-playbook.yml)
+- Updates all packages on Debian/Ubuntu and RedHat/CentOS
+- Demonstrates OS family detection and conditional execution
+- **Concepts**: `when` conditionals, `apt`/`yum` modules, fact gathering
+
+#### 👥 [User and Group Management](examples/basic/user-management-playbook.yml)
+- Creates users, groups, and configures SSH keys
+- Manages sudo access
+- **Concepts**: `user`, `group`, `authorized_key` modules, loops
+
+#### 📂 [File and Directory Operations](examples/basic/file-operations-playbook.yml)
+- Creates directories, copies files, manages permissions
+- Sets up log rotation
+- **Concepts**: `file`, `copy`, `template`, `lineinfile` modules
+
+#### 🔄 [Service Management](examples/basic/service-management-playbook.yml)
+- Installs and manages system services (nginx, ssh)
+- Configures systemd services
+- **Concepts**: `service` module, handlers, service verification
+
+### Intermediate Examples
+
+For users comfortable with Ansible basics, ready for real-world scenarios.
+
+#### 🌐 [Web Server Setup (Nginx)](examples/intermediate/web-server/)
+- Complete Nginx installation and configuration
+- SSL/TLS certificate generation
+- Virtual host configuration
+- Firewall setup
+- **Concepts**: Templates, SSL configuration, handlers, UFW firewall
+
+#### 🗄️ [Database Setup (PostgreSQL)](examples/intermediate/database/)
+- PostgreSQL installation and configuration
+- Database and user creation
+- Performance tuning
+- Automated backup setup
+- **Concepts**: PostgreSQL modules, cron jobs, security hardening
+
+#### 🚀 [Application Deployment (Flask)](examples/intermediate/app-deployment/)
+- Python Flask application deployment
+- Virtual environment setup
+- Gunicorn WSGI server configuration
+- Nginx reverse proxy
+- Systemd service creation
+- **Concepts**: Python deployment, systemd, reverse proxy, application lifecycle
+
+### Advanced Examples
+
+Advanced patterns and best practices for production environments.
+
+#### 🏗️ [Role-Based Playbooks](examples/advanced/role-based/)
+- Complete role structure with common, webserver, and database roles
+- Demonstrates proper role organization
+- Reusable components
+- **Directory Structure**:
+  ```
+  roles/
+    ├── common/       # Base configuration for all servers
+    ├── webserver/    # Web server role
+    └── database/     # Database role
+  ```
+- **Concepts**: Role organization, dependencies, variable precedence
+
+#### 🔐 [Vault-Encrypted Variables](examples/advanced/vault-encrypted/)
+- Secure handling of sensitive data (passwords, API keys)
+- Ansible Vault encryption and decryption
+- Best practices for secrets management
+- **Concepts**: `ansible-vault`, `no_log`, secure variable handling
+- **Usage**:
+  ```bash
+  ansible-vault create secrets.yml
+  ansible-playbook vault-playbook.yml --ask-vault-pass
+  ```
+
+#### 🔍 [Dynamic Inventory](examples/advanced/dynamic-inventory/)
+- Auto-discovery of infrastructure
+- AWS EC2, Azure, GCP inventory plugins
+- Custom dynamic inventory scripts
+- **Concepts**: Inventory plugins, cloud integration, auto-scaling
+- **Includes**:
+  - `aws_ec2.yml` - AWS EC2 dynamic inventory
+  - `custom_inventory.py` - Custom inventory script example
+
+---
+
+## 🎯 Mezzanine CMS Deployment Example
+
+A complete production-ready example deploying [Mezzanine CMS](http://mezzanine.jupo.org/) to an Ubuntu server.
 
 ## 📋 Prerequisites
 
@@ -269,6 +446,169 @@ After deployment, files are organized as:
 - [Django Documentation](https://docs.djangoproject.com/)
 - [Ansible: Up and Running, 3rd Edition](https://www.ansiblebook.com/)
 
+---
+
+## 📂 Project Structure
+
+```
+ansible-playbook-examples/
+├── README.md                          # This file
+├── ANSIBLE_THEORY.md                  # Comprehensive Ansible theory documentation
+├── example1.yml                       # Original simple nginx example
+│
+├── examples/                          # Organized playbook examples
+│   ├── basic/                         # Basic examples for beginners
+│   │   ├── system-update-playbook.yml
+│   │   ├── user-management-playbook.yml
+│   │   ├── file-operations-playbook.yml
+│   │   └── service-management-playbook.yml
+│   │
+│   ├── intermediate/                  # Intermediate real-world examples
+│   │   ├── web-server/
+│   │   │   ├── nginx-setup.yml
+│   │   │   ├── nginx.conf.j2
+│   │   │   └── vhost.conf.j2
+│   │   ├── database/
+│   │   │   └── postgresql-setup.yml
+│   │   └── app-deployment/
+│   │       ├── flask-app-deployment.yml
+│   │       └── flask-app.service.j2
+│   │
+│   └── advanced/                      # Advanced patterns and practices
+│       ├── role-based/
+│       │   ├── site.yml
+│       │   └── roles/
+│       │       ├── common/
+│       │       ├── webserver/
+│       │       └── database/
+│       ├── vault-encrypted/
+│       │   ├── README.md
+│       │   ├── vault-playbook.yml
+│       │   ├── app_secrets.j2
+│       │   └── secrets.example.yml
+│       └── dynamic-inventory/
+│           ├── README.md
+│           ├── aws_ec2.yml
+│           └── custom_inventory.py
+│
+└── inventories/                       # Inventory file examples
+    └── example_hosts                  # Example static inventory
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how you can help:
+
+### Adding New Examples
+
+1. **Fork the repository**
+2. **Create a new branch**: `git checkout -b feature/new-example`
+3. **Follow the example structure**:
+   - Add clear description at the top of the playbook
+   - Include prerequisites
+   - Document key concepts used
+   - Provide usage instructions
+   - Add expected output/results
+   - Include use cases at the bottom
+4. **Test your playbook** on a clean system
+5. **Submit a pull request**
+
+### Example Template
+
+When creating new examples, use this template:
+
+```yaml
+---
+# Example Name
+#
+# Description:
+#   Brief description of what this playbook does
+#
+# Prerequisites:
+#   - List prerequisites here
+#
+# Usage:
+#   ansible-playbook -i inventory playbook.yml
+#
+# Expected Output:
+#   - What should happen when run successfully
+#
+# Key Concepts:
+#   - Concept 1
+#   - Concept 2
+
+- name: Playbook name
+  hosts: target_hosts
+  become: true
+  
+  tasks:
+    - name: Task description
+      module_name:
+        parameter: value
+
+# Use Cases:
+#   - Use case 1
+#   - Use case 2
+```
+
+### Reporting Issues
+
+- Use GitHub Issues to report bugs or suggest improvements
+- Include Ansible version, OS, and error messages
+- Provide steps to reproduce the issue
+
+### Documentation Improvements
+
+- Fix typos or unclear explanations
+- Add more examples to theory documentation
+- Improve README organization
+- Translate documentation (future)
+
+---
+
+## 📚 Additional Resources
+
+### Official Documentation
+- [Ansible Documentation](https://docs.ansible.com/) - Official comprehensive docs
+- [Ansible Galaxy](https://galaxy.ansible.com/) - Repository of community roles
+- [Ansible GitHub](https://github.com/ansible/ansible) - Source code and issues
+
+### Books
+- **"Ansible: Up and Running"** by Lorin Hochstein and René Moser
+- **"Ansible for DevOps"** by Jeff Geerling
+- **"Mastering Ansible"** by James Freeman and Jesse Keating
+
+### Online Learning
+- [Ansible 101 by Jeff Geerling](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvMYt6ATmgC0KAGGJNAN) - YouTube series
+- [Red Hat Ansible Training](https://www.redhat.com/en/services/training/ansible-training) - Official training
+- [Ansible Tutorial for Beginners](https://www.youtube.com/playlist?list=PLT98CRl2KxKEUHie1m24-wkyHpEsa4Y70) - Video tutorials
+
+### Community
+- [Ansible Mailing List](https://groups.google.com/forum/#!forum/ansible-project)
+- [Ansible Reddit](https://www.reddit.com/r/ansible/)
+- [Ansible IRC](https://docs.ansible.com/ansible/latest/community/communication.html)
+- [Ansible Forum](https://forum.ansible.com/)
+
+### Related Projects
+- [Ansible Lint](https://github.com/ansible/ansible-lint) - Best practice checker
+- [Molecule](https://molecule.readthedocs.io/) - Testing framework for Ansible roles
+- [AWX](https://github.com/ansible/awx) - Web-based UI for Ansible (upstream of Ansible Tower)
+
+---
+
 ## 📄 License
 
-This project is provided as educational material based on "Ansible: Up and Running".
+This project is provided as educational material. Individual examples and documentation are available for free use in learning and personal projects.
+
+Based on concepts from "Ansible: Up and Running" and community best practices.
+
+---
+
+## ⭐ Star This Repository
+
+If you find this repository helpful, please consider giving it a star! It helps others discover these resources.
+
+**Questions? Issues? Suggestions?** 
+Open an [issue](https://github.com/savisaluwadana/ansible-playbook-examples/issues) or submit a pull request!

@@ -1,0 +1,14 @@
+---
+# Default variables for common role
+timezone: "UTC"
+admin_user: "admin"
+admin_groups: "sudo"
+
+common_packages:
+  - vim
+  - git
+  - curl
+  - wget
+  - htop
+  - net-tools
+  - unzip

@@ -1,0 +1,6 @@
+---
+# Default variables for database role
+db_name: "appdb"
+db_user: "appuser"
+db_password: "ChangeMe123!"
+allow_remote_connections: false

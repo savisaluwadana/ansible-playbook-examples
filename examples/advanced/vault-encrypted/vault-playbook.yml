@@ -1,0 +1,121 @@
+---
+# Vault-Encrypted Variables Playbook
+#
+# Description:
+#   Demonstrates using Ansible Vault encrypted variables in playbooks
+#   Shows best practices for handling sensitive data
+#
+# Prerequisites:
+#   - Create encrypted secrets file: ansible-vault create secrets.yml
+#   - Add db_password, api_key, and other secrets
+#
+# Usage:
+#   ansible-playbook -i ../../inventories/example_hosts vault-playbook.yml --ask-vault-pass
+#
+# Key Concepts:
+#   - Loading encrypted variable files
+#   - Using vault-encrypted variables
+#   - Preventing sensitive data from appearing in logs
+#   - Vault password management
+
+- name: Deploy application with encrypted secrets
+  hosts: appservers
+  become: true
+  
+  # Load encrypted variables file
+  vars_files:
+    - secrets.yml
+  
+  # Public variables
+  vars:
+    app_name: secure_app
+    app_user: appuser
+    config_dir: /etc/{{ app_name }}
+  
+  tasks:
+    - name: Create application user
+      user:
+        name: "{{ app_user }}"
+        state: present
+        create_home: yes
+      tags:
+        - setup
+    
+    - name: Create configuration directory
+      file:
+        path: "{{ config_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0750'
+      tags:
+        - setup
+    
+    - name: Deploy database configuration
+      copy:
+        content: |
+          DB_HOST={{ db_host }}
+          DB_NAME={{ db_name }}
+          DB_USER={{ db_user }}
+          DB_PASSWORD={{ db_password }}
+        dest: "{{ config_dir }}/database.conf"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0600'
+      no_log: true  # Prevent password from appearing in logs
+      tags:
+        - config
+    
+    - name: Deploy API configuration
+      copy:
+        content: |
+          API_KEY={{ api_key }}
+          API_SECRET={{ api_secret }}
+          API_ENDPOINT={{ api_endpoint }}
+        dest: "{{ config_dir }}/api.conf"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0600'
+      no_log: true
+      tags:
+        - config
+    
+    - name: Deploy application secrets
+      template:
+        src: app_secrets.j2
+        dest: "{{ config_dir }}/secrets.conf"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0600'
+      no_log: true
+      tags:
+        - config
+    
+    - name: Verify configuration files exist
+      stat:
+        path: "{{ item }}"
+      register: config_files
+      loop:
+        - "{{ config_dir }}/database.conf"
+        - "{{ config_dir }}/api.conf"
+        - "{{ config_dir }}/secrets.conf"
+      tags:
+        - verify
+    
+    - name: Display verification results
+      debug:
+        msg: "Configuration file {{ item.item }} exists: {{ item.stat.exists }}"
+      loop: "{{ config_files.results }}"
+      tags:
+        - verify
+
+# Note: This playbook expects secrets.yml with the following structure:
+# ---
+# db_host: localhost
+# db_name: appdb
+# db_user: appuser
+# db_password: "encrypted-password"
+# api_key: "encrypted-api-key"
+# api_secret: "encrypted-secret"
+# api_endpoint: "https://api.example.com"
+# app_secret_key: "encrypted-app-secret"

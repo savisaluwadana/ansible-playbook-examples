@@ -1,0 +1,62 @@
+# Role-Based Playbook with Proper Directory Structure
+#
+# Description:
+#   Demonstrates best practices for organizing playbooks using roles
+#   Includes a complete role structure for deploying a LAMP stack
+#
+# Directory Structure:
+#   role-based/
+#   ├── site.yml                    # Main playbook
+#   ├── roles/
+#   │   ├── common/                 # Common configuration for all servers
+#   │   │   ├── tasks/
+#   │   │   │   └── main.yml
+#   │   │   ├── handlers/
+#   │   │   │   └── main.yml
+#   │   │   └── defaults/
+#   │   │       └── main.yml
+#   │   ├── webserver/              # Web server role
+#   │   │   ├── tasks/
+#   │   │   │   └── main.yml
+#   │   │   ├── templates/
+#   │   │   │   └── vhost.conf.j2
+#   │   │   ├── handlers/
+#   │   │   │   └── main.yml
+#   │   │   └── defaults/
+#   │   │       └── main.yml
+#   │   └── database/               # Database role
+#   │       ├── tasks/
+#   │       │   └── main.yml
+#   │       ├── handlers/
+#   │       │   └── main.yml
+#   │       └── defaults/
+#   │           └── main.yml
+#
+# Usage:
+#   ansible-playbook -i inventories/example_hosts site.yml
+#
+# Key Concepts:
+#   - Role-based organization
+#   - Separation of concerns
+#   - Reusable components
+#   - Role dependencies
+#   - Variable precedence
+
+---
+- name: Configure all servers with common settings
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Configure web servers
+  hosts: webservers
+  become: true
+  roles:
+    - webserver
+
+- name: Configure database servers
+  hosts: databases
+  become: true
+  roles:
+    - database
