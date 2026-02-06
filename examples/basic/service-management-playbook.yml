@@ -1,0 +1,196 @@
+---
+# Service Management Playbook
+#
+# Description:
+#   Manages system services including installation, configuration,
+#   starting, stopping, and monitoring
+#
+# Prerequisites:
+#   - Target hosts with systemd
+#   - Sudo access
+#
+# Usage:
+#   ansible-playbook -i inventories/basic_hosts service-management-playbook.yml
+#
+# Expected Output:
+#   - Services installed and configured
+#   - Services enabled for auto-start on boot
+#   - Service status verified
+#
+# Key Concepts:
+#   - Service module for service management
+#   - Handlers for service restarts
+#   - Service verification
+#   - Systemd service configuration
+
+- name: Service management and monitoring
+  hosts: all
+  become: true
+  
+  vars:
+    services_to_manage:
+      - { name: 'nginx', state: 'started', enabled: true }
+      - { name: 'ssh', state: 'started', enabled: true }
+  
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+    
+    - name: Reload nginx
+      service:
+        name: nginx
+        state: reloaded
+    
+    - name: Restart ssh
+      service:
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+        state: restarted
+  
+  tasks:
+    - name: Install nginx web server
+      package:
+        name: nginx
+        state: present
+      tags:
+        - install
+        - nginx
+    
+    - name: Install OpenSSH server
+      package:
+        name: "{{ 'openssh-server' if ansible_os_family == 'Debian' else 'openssh' }}"
+        state: present
+      tags:
+        - install
+        - ssh
+    
+    - name: Ensure nginx is started and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      tags:
+        - nginx
+        - services
+    
+    - name: Ensure SSH service is started and enabled
+      service:
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+        state: started
+        enabled: yes
+      tags:
+        - ssh
+        - services
+    
+    - name: Configure nginx worker processes
+      lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: '^worker_processes'
+        line: "worker_processes {{ ansible_processor_cores }};"
+      notify: Reload nginx
+      tags:
+        - nginx
+        - config
+    
+    - name: Configure SSH to disable root login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: Restart ssh
+      tags:
+        - ssh
+        - security
+    
+    - name: Configure SSH to use key authentication only
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: Restart ssh
+      tags:
+        - ssh
+        - security
+    
+    - name: Get service facts
+      service_facts:
+      tags:
+        - facts
+    
+    - name: Display nginx service status
+      debug:
+        msg: "Nginx service is {{ ansible_facts.services['nginx.service'].state }}"
+      when: "'nginx.service' in ansible_facts.services"
+      tags:
+        - nginx
+        - debug
+    
+    - name: Check if nginx is listening on port 80
+      wait_for:
+        port: 80
+        timeout: 10
+        msg: "Nginx is not listening on port 80"
+      tags:
+        - nginx
+        - verification
+    
+    - name: Create systemd service for custom application
+      copy:
+        content: |
+          [Unit]
+          Description=My Custom Application
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=www-data
+          WorkingDirectory=/opt/myapp
+          ExecStart=/opt/myapp/bin/myapp
+          Restart=always
+          RestartSec=10
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/myapp.service
+        owner: root
+        group: root
+        mode: '0644'
+      tags:
+        - custom-service
+    
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      tags:
+        - custom-service
+    
+    - name: Stop and disable unnecessary services
+      service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - bluetooth
+      when: "'bluetooth.service' in ansible_facts.services"
+      ignore_errors: yes
+      tags:
+        - cleanup
+    
+    - name: Verify critical services are running
+      assert:
+        that:
+          - ansible_facts.services['nginx.service'].state == 'running'
+          - ansible_facts.services['nginx.service'].status == 'enabled'
+        fail_msg: "Critical service nginx is not running or not enabled"
+        success_msg: "All critical services are running"
+      tags:
+        - verification
+
+# Use Cases:
+#   - Web server deployment and management
+#   - Securing SSH access
+#   - Creating custom systemd services
+#   - Service health monitoring
+#   - Automated service recovery
+#   - Compliance checks for running services

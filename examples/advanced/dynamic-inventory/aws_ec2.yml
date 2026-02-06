@@ -1,0 +1,61 @@
+---
+# AWS EC2 Dynamic Inventory Configuration
+#
+# This file configures the AWS EC2 inventory plugin
+# Automatically discovers EC2 instances based on filters
+
+plugin: aws_ec2
+
+# AWS regions to query
+regions:
+  - us-east-1
+  - us-west-2
+  - eu-west-1
+
+# Filters to limit instances (optional)
+filters:
+  # Only include running instances
+  instance-state-name: running
+  
+  # Filter by tags
+  # tag:Environment: production
+
+# Group instances by tags
+keyed_groups:
+  # Group by Environment tag
+  - key: tags.Environment
+    prefix: env
+    separator: "_"
+  
+  # Group by Application tag
+  - key: tags.Application
+    prefix: app
+    separator: "_"
+  
+  # Group by instance type
+  - key: instance_type
+    prefix: instance_type
+  
+  # Group by availability zone
+  - key: placement.availability_zone
+    prefix: az
+
+# Compose inventory hostname from tag or use public DNS
+hostnames:
+  - tag:Name
+  - dns-name
+  - public-ip-address
+
+# Set hostvars
+compose:
+  ansible_host: public_ip_address
+  ansible_user: "'ec2-user'"
+  
+# Enable inventory caching
+cache: yes
+cache_plugin: jsonfile
+cache_timeout: 3600
+cache_connection: /tmp/ansible_aws_cache
+
+# Use strict mode
+strict: False

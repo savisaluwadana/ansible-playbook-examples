@@ -1,0 +1,64 @@
+---
+# Webserver role - tasks for web servers
+- name: Install Apache web server
+  apt:
+    name: apache2
+    state: present
+  when: webserver_type == "apache"
+
+- name: Install Nginx web server
+  apt:
+    name: nginx
+    state: present
+  when: webserver_type == "nginx"
+
+- name: Create document root
+  file:
+    path: "{{ document_root }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Deploy website template
+  template:
+    src: vhost.conf.j2
+    dest: "{{ vhost_config_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart webserver
+
+- name: Create index page
+  copy:
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head><title>{{ site_name }}</title></head>
+      <body>
+        <h1>Welcome to {{ site_name }}</h1>
+        <p>Deployed with Ansible roles</p>
+      </body>
+      </html>
+    dest: "{{ document_root }}/index.html"
+    owner: www-data
+    group: www-data
+    mode: '0644'
+
+- name: Configure firewall for HTTP
+  ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+
+- name: Configure firewall for HTTPS
+  ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+- name: Ensure webserver is started and enabled
+  service:
+    name: "{{ webserver_service }}"
+    state: started
+    enabled: yes

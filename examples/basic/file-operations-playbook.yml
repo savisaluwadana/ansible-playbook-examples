@@ -1,0 +1,195 @@
+---
+# File and Directory Operations Playbook
+#
+# Description:
+#   Demonstrates various file and directory manipulation operations
+#   including creating, copying, templating, and managing permissions
+#
+# Prerequisites:
+#   - Target hosts with sudo access
+#   - Source files in files/ and templates/ directories
+#
+# Usage:
+#   ansible-playbook -i inventories/basic_hosts file-operations-playbook.yml
+#
+# Expected Output:
+#   - Directories created with proper permissions
+#   - Files copied and templated
+#   - Symbolic links created
+#   - File content modified
+#
+# Key Concepts:
+#   - File module for file/directory operations
+#   - Copy module for static files
+#   - Template module for dynamic content
+#   - Lineinfile for targeted file edits
+#   - Blockinfile for multi-line insertions
+
+- name: File and directory operations
+  hosts: all
+  become: true
+  
+  vars:
+    app_name: myapp
+    app_version: 1.0.0
+    app_root: /opt/{{ app_name }}
+    config_dir: /etc/{{ app_name }}
+  
+  tasks:
+    - name: Create application directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ app_root }}"
+        - "{{ app_root }}/bin"
+        - "{{ app_root }}/lib"
+        - "{{ app_root }}/logs"
+        - "{{ app_root }}/data"
+        - "{{ config_dir }}"
+      tags:
+        - directories
+    
+    - name: Set specific permissions on logs directory
+      file:
+        path: "{{ app_root }}/logs"
+        state: directory
+        owner: root
+        group: adm
+        mode: '0775'
+      tags:
+        - directories
+        - permissions
+    
+    - name: Create application configuration file
+      copy:
+        content: |
+          # {{ app_name }} Configuration
+          APP_NAME={{ app_name }}
+          APP_VERSION={{ app_version }}
+          APP_ROOT={{ app_root }}
+          LOG_LEVEL=info
+          DEBUG=false
+        dest: "{{ config_dir }}/app.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      tags:
+        - config
+    
+    - name: Create README file
+      copy:
+        content: |
+          # {{ app_name }}
+          
+          Version: {{ app_version }}
+          Installation Path: {{ app_root }}
+          
+          ## Directory Structure
+          - bin/     - Executable binaries
+          - lib/     - Libraries and dependencies
+          - logs/    - Application logs
+          - data/    - Application data
+          
+          ## Configuration
+          Configuration file: {{ config_dir }}/app.conf
+        dest: "{{ app_root }}/README.md"
+        owner: root
+        group: root
+        mode: '0644'
+      tags:
+        - documentation
+    
+    - name: Create log rotation configuration
+      blockinfile:
+        path: /etc/logrotate.d/{{ app_name }}
+        create: yes
+        owner: root
+        group: root
+        mode: '0644'
+        block: |
+          {{ app_root }}/logs/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+              create 0664 root adm
+          }
+      tags:
+        - logging
+    
+    - name: Ensure specific line exists in config
+      lineinfile:
+        path: "{{ config_dir }}/app.conf"
+        line: "ENVIRONMENT=production"
+        create: yes
+      tags:
+        - config
+    
+    - name: Create symbolic link for current version
+      file:
+        src: "{{ app_root }}"
+        dest: /opt/{{ app_name }}-current
+        state: link
+      tags:
+        - links
+    
+    - name: Create empty data file with specific ownership
+      file:
+        path: "{{ app_root }}/data/app.db"
+        state: touch
+        owner: www-data
+        group: www-data
+        mode: '0660'
+        modification_time: preserve
+        access_time: preserve
+      tags:
+        - files
+    
+    - name: Find and display large log files
+      find:
+        paths: "{{ app_root }}/logs"
+        patterns: "*.log"
+        size: 10m
+      register: large_logs
+      tags:
+        - maintenance
+    
+    - name: Display large log files
+      debug:
+        msg: "Large log file found: {{ item.path }} ({{ item.size }} bytes)"
+      loop: "{{ large_logs.files }}"
+      when: large_logs.files | length > 0
+      tags:
+        - maintenance
+    
+    - name: Set up file attributes (immutable flag on critical files)
+      file:
+        path: "{{ config_dir }}/app.conf"
+        attributes: "+i"
+      when: ansible_os_family == "Debian"
+      tags:
+        - security
+    
+    - name: Create backup directory with timestamp
+      file:
+        path: "{{ app_root }}/backups/{{ ansible_date_time.date }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags:
+        - backup
+
+# Use Cases:
+#   - Application installation and setup
+#   - Configuration management
+#   - Log rotation setup
+#   - Creating standardized directory structures
+#   - Backup preparation
+#   - Security hardening (permissions, attributes)

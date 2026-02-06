@@ -1,0 +1,99 @@
+---
+# System Update Playbook
+# 
+# Description:
+#   Updates all packages on Debian/Ubuntu and RedHat/CentOS systems
+#   Demonstrates conditional execution based on OS family
+#
+# Prerequisites:
+#   - Target hosts with sudo access
+#   - Python installed on target hosts
+#
+# Usage:
+#   ansible-playbook -i inventories/basic_hosts system-update-playbook.yml
+#
+# Expected Output:
+#   - All system packages updated to latest versions
+#   - System may require reboot if kernel updated
+#
+# Key Concepts:
+#   - Conditional execution with 'when'
+#   - OS family detection using facts
+#   - Package management modules (apt, yum)
+#   - Privilege escalation with 'become'
+
+- name: System update and package management
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Update apt cache (Debian/Ubuntu)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      tags:
+        - update
+        - debian
+    
+    - name: Upgrade all apt packages (Debian/Ubuntu)
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+      when: ansible_os_family == "Debian"
+      register: apt_upgrade
+      tags:
+        - upgrade
+        - debian
+    
+    - name: Update yum cache (RedHat/CentOS)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      tags:
+        - update
+        - redhat
+    
+    - name: Upgrade all yum packages (RedHat/CentOS)
+      yum:
+        name: "*"
+        state: latest
+      when: ansible_os_family == "RedHat"
+      register: yum_upgrade
+      tags:
+        - upgrade
+        - redhat
+    
+    - name: Check if reboot is required (Debian/Ubuntu)
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+      when: ansible_os_family == "Debian"
+    
+    - name: Display reboot requirement status
+      debug:
+        msg: "Reboot is required on {{ inventory_hostname }}"
+      when: 
+        - ansible_os_family == "Debian"
+        - reboot_required_file.stat.exists
+    
+    - name: Install common useful packages
+      package:
+        name:
+          - vim
+          - git
+          - curl
+          - wget
+          - htop
+        state: present
+      tags:
+        - packages
+        - common
+
+# Use Cases:
+#   - Regular system maintenance
+#   - Security patch deployment
+#   - Pre-deployment environment preparation
+#   - Automated monthly updates

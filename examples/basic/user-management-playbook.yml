@@ -1,0 +1,131 @@
+---
+# User Management Playbook
+#
+# Description:
+#   Creates and manages user accounts, groups, and SSH keys
+#   Demonstrates user and group management best practices
+#
+# Prerequisites:
+#   - Target hosts with sudo access
+#   - SSH public key for deployment
+#
+# Usage:
+#   ansible-playbook -i inventories/basic_hosts user-management-playbook.yml
+#
+# Expected Output:
+#   - Users created with specified properties
+#   - Groups created and users assigned
+#   - SSH keys deployed for passwordless access
+#
+# Key Concepts:
+#   - User module for account management
+#   - Group module for group creation
+#   - Password hashing for security
+#   - SSH key management
+#   - Loops for multiple items
+
+- name: User and group management
+  hosts: all
+  become: true
+  
+  vars:
+    # Define users to create
+    app_users:
+      - name: appuser
+        comment: "Application User"
+        groups: "apps,developers"
+        shell: /bin/bash
+      - name: deployer
+        comment: "Deployment User"
+        groups: "apps,sudo"
+        shell: /bin/bash
+      - name: monitor
+        comment: "Monitoring User"
+        groups: "apps"
+        shell: /bin/bash
+    
+    # Define groups to create
+    app_groups:
+      - apps
+      - developers
+  
+  tasks:
+    - name: Create application groups
+      group:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ app_groups }}"
+      tags:
+        - groups
+    
+    - name: Create user accounts
+      user:
+        name: "{{ item.name }}"
+        comment: "{{ item.comment }}"
+        groups: "{{ item.groups }}"
+        shell: "{{ item.shell }}"
+        create_home: yes
+        state: present
+      loop: "{{ app_users }}"
+      tags:
+        - users
+    
+    - name: Set up SSH key for deployer user
+      authorized_key:
+        user: deployer
+        state: present
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+      tags:
+        - ssh
+        - deployer
+    
+    - name: Create .ssh directory for appuser
+      file:
+        path: /home/appuser/.ssh
+        state: directory
+        owner: appuser
+        group: appuser
+        mode: '0700'
+      tags:
+        - users
+        - ssh
+    
+    - name: Configure sudo access for deployer
+      copy:
+        content: |
+          # Allow deployer user to run all commands without password
+          deployer ALL=(ALL) NOPASSWD:ALL
+        dest: /etc/sudoers.d/deployer
+        owner: root
+        group: root
+        mode: '0440'
+        validate: 'visudo -cf %s'
+      tags:
+        - sudo
+        - deployer
+    
+    - name: Lock monitor user account (read-only)
+      user:
+        name: monitor
+        password_lock: yes
+      tags:
+        - users
+        - security
+    
+    - name: Remove unwanted test users
+      user:
+        name: "{{ item }}"
+        state: absent
+        remove: yes
+      loop:
+        - testuser
+        - tempuser
+      tags:
+        - cleanup
+
+# Use Cases:
+#   - Onboarding new team members
+#   - Creating service accounts for applications
+#   - Setting up deployment automation users
+#   - Managing access control
+#   - Compliance with security policies

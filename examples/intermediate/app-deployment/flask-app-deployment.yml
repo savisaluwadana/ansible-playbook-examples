@@ -1,0 +1,340 @@
+---
+# Python Flask Application Deployment Playbook
+#
+# Description:
+#   Complete deployment of a Python Flask web application
+#   Includes Python environment setup, application deployment,
+#   Gunicorn WSGI server, Nginx reverse proxy, and systemd service
+#
+# Prerequisites:
+#   - Target Ubuntu/Debian server
+#   - Git repository with Flask application
+#   - Sudo access
+#
+# Usage:
+#   ansible-playbook -i inventories/intermediate_hosts app-deployment/flask-app-deployment.yml
+#
+# Expected Output:
+#   - Python virtual environment created
+#   - Flask application deployed
+#   - Gunicorn configured and running
+#   - Nginx reverse proxy configured
+#   - Application accessible via web browser
+#
+# Key Concepts:
+#   - Python virtual environment management
+#   - Git deployment
+#   - Systemd service creation
+#   - Reverse proxy configuration
+#   - Application lifecycle management
+
+- name: Deploy Python Flask application
+  hosts: appservers
+  become: true
+  
+  vars:
+    app_name: flask_app
+    app_user: www-data
+    app_group: www-data
+    app_root: /opt/{{ app_name }}
+    app_repo: https://github.com/pallets/flask
+    app_branch: main
+    venv_path: "{{ app_root }}/venv"
+    gunicorn_workers: "{{ (ansible_processor_vcpus * 2) + 1 }}"
+    gunicorn_bind: "127.0.0.1:8000"
+    server_name: "{{ ansible_default_ipv4.address }}"
+  
+  handlers:
+    - name: Restart flask app
+      systemd:
+        name: "{{ app_name }}"
+        state: restarted
+        daemon_reload: yes
+    
+    - name: Reload nginx
+      service:
+        name: nginx
+        state: reloaded
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags:
+        - install
+    
+    - name: Install system dependencies
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+          - git
+          - nginx
+          - build-essential
+          - python3-dev
+        state: present
+      tags:
+        - install
+    
+    - name: Create application directory
+      file:
+        path: "{{ app_root }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+      tags:
+        - setup
+    
+    - name: Create application subdirectories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+      loop:
+        - "{{ app_root }}/logs"
+        - "{{ app_root }}/static"
+        - "{{ app_root }}/instance"
+      tags:
+        - setup
+    
+    - name: Deploy sample Flask application
+      copy:
+        content: |
+          from flask import Flask, jsonify
+          import os
+          import socket
+          
+          app = Flask(__name__)
+          
+          @app.route('/')
+          def hello():
+              return '''
+              <html>
+                  <head><title>Flask App</title></head>
+                  <body style="font-family: Arial; margin: 50px;">
+                      <h1>Flask Application Deployed Successfully!</h1>
+                      <div style="background: #f0f0f0; padding: 20px; border-radius: 5px;">
+                          <h2>Server Information</h2>
+                          <p><strong>Hostname:</strong> {}</p>
+                          <p><strong>Python Version:</strong> {}</p>
+                          <p><strong>Application Root:</strong> {{ app_root }}</p>
+                      </div>
+                  </body>
+              </html>
+              '''.format(socket.gethostname(), os.sys.version.split()[0])
+          
+          @app.route('/api/health')
+          def health():
+              return jsonify({
+                  'status': 'healthy',
+                  'hostname': socket.gethostname()
+              })
+          
+          if __name__ == '__main__':
+              app.run(debug=False)
+        dest: "{{ app_root }}/app.py"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0644'
+      notify: Restart flask app
+      tags:
+        - deploy
+    
+    - name: Create requirements.txt
+      copy:
+        content: |
+          Flask==2.3.0
+          gunicorn==20.1.0
+          werkzeug==2.3.0
+        dest: "{{ app_root }}/requirements.txt"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0644'
+      tags:
+        - deploy
+    
+    - name: Create Python virtual environment
+      command: python3 -m venv {{ venv_path }}
+      args:
+        creates: "{{ venv_path }}/bin/activate"
+      become_user: "{{ app_user }}"
+      tags:
+        - python
+    
+    - name: Upgrade pip in virtual environment
+      pip:
+        name: pip
+        state: latest
+        virtualenv: "{{ venv_path }}"
+      become_user: "{{ app_user }}"
+      tags:
+        - python
+    
+    - name: Install Python dependencies
+      pip:
+        requirements: "{{ app_root }}/requirements.txt"
+        virtualenv: "{{ venv_path }}"
+      become_user: "{{ app_user }}"
+      tags:
+        - python
+        - deploy
+    
+    - name: Create Gunicorn configuration file
+      copy:
+        content: |
+          import multiprocessing
+          
+          bind = "{{ gunicorn_bind }}"
+          workers = {{ gunicorn_workers }}
+          worker_class = "sync"
+          worker_connections = 1000
+          timeout = 30
+          keepalive = 2
+          
+          accesslog = "{{ app_root }}/logs/access.log"
+          errorlog = "{{ app_root }}/logs/error.log"
+          loglevel = "info"
+          
+          pidfile = "{{ app_root }}/gunicorn.pid"
+          
+          daemon = False
+        dest: "{{ app_root }}/gunicorn_config.py"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0644'
+      notify: Restart flask app
+      tags:
+        - config
+    
+    - name: Create systemd service file
+      template:
+        src: flask-app.service.j2
+        dest: /etc/systemd/system/{{ app_name }}.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart flask app
+      tags:
+        - systemd
+    
+    - name: Enable and start Flask application service
+      systemd:
+        name: "{{ app_name }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      tags:
+        - systemd
+        - service
+    
+    - name: Configure Nginx reverse proxy
+      copy:
+        content: |
+          upstream {{ app_name }}_backend {
+              server {{ gunicorn_bind }};
+          }
+          
+          server {
+              listen 80;
+              server_name {{ server_name }};
+              
+              access_log /var/log/nginx/{{ app_name }}_access.log;
+              error_log /var/log/nginx/{{ app_name }}_error.log;
+              
+              location / {
+                  proxy_pass http://{{ app_name }}_backend;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  
+                  # Timeouts
+                  proxy_connect_timeout 60s;
+                  proxy_send_timeout 60s;
+                  proxy_read_timeout 60s;
+              }
+              
+              location /static {
+                  alias {{ app_root }}/static;
+                  expires 30d;
+                  add_header Cache-Control "public, immutable";
+              }
+          }
+        dest: /etc/nginx/sites-available/{{ app_name }}.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload nginx
+      tags:
+        - nginx
+    
+    - name: Enable Nginx site
+      file:
+        src: /etc/nginx/sites-available/{{ app_name }}.conf
+        dest: /etc/nginx/sites-enabled/{{ app_name }}.conf
+        state: link
+      notify: Reload nginx
+      tags:
+        - nginx
+    
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+      tags:
+        - nginx
+    
+    - name: Ensure Nginx is started and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      tags:
+        - nginx
+    
+    - name: Wait for application to be ready
+      wait_for:
+        port: 8000
+        timeout: 60
+      tags:
+        - verify
+    
+    - name: Test application health endpoint
+      uri:
+        url: "http://{{ gunicorn_bind }}/api/health"
+        return_content: yes
+      register: health_check
+      tags:
+        - verify
+    
+    - name: Display health check result
+      debug:
+        msg: "Application health: {{ health_check.json }}"
+      tags:
+        - verify
+    
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Flask application deployed successfully!"
+          - "Application URL: http://{{ server_name }}"
+          - "Health endpoint: http://{{ server_name }}/api/health"
+          - "Application root: {{ app_root }}"
+          - "Virtual environment: {{ venv_path }}"
+          - "Service status: systemctl status {{ app_name }}"
+          - "Logs: journalctl -u {{ app_name }} -f"
+      tags:
+        - info
+
+# Use Cases:
+#   - Web application deployment
+#   - API service deployment
+#   - Microservices deployment
+#   - Development environment setup
+#   - Continuous deployment pipeline

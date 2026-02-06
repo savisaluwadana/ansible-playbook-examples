@@ -1,0 +1,309 @@
+---
+# PostgreSQL Database Setup Playbook
+#
+# Description:
+#   Complete PostgreSQL installation, configuration, and database setup
+#   Includes user creation, database creation, and security hardening
+#
+# Prerequisites:
+#   - Target Ubuntu/Debian server
+#   - Sudo access
+#
+# Usage:
+#   ansible-playbook -i inventories/intermediate_hosts database/postgresql-setup.yml \
+#     -e "db_password=SecurePassword123"
+#
+# Expected Output:
+#   - PostgreSQL installed and running
+#   - Database and user created
+#   - Configuration optimized
+#   - Firewall configured
+#
+# Key Concepts:
+#   - PostgreSQL module usage
+#   - Database and user management
+#   - Password encryption with Ansible Vault
+#   - Configuration tuning
+#   - Security best practices
+
+- name: Setup PostgreSQL database server
+  hosts: databases
+  become: true
+  
+  vars:
+    postgresql_version: "14"
+    db_name: appdb
+    db_user: appuser
+    db_password: "{{ lookup('env', 'DB_PASSWORD') | default('ChangeMe123!', true) }}"
+    postgresql_data_dir: /var/lib/postgresql/{{ postgresql_version }}/main
+    postgresql_config_dir: /etc/postgresql/{{ postgresql_version }}/main
+    # Tuning parameters (adjust based on available RAM)
+    shared_buffers: "256MB"
+    effective_cache_size: "1GB"
+    maintenance_work_mem: "64MB"
+    checkpoint_completion_target: "0.9"
+    wal_buffers: "16MB"
+    default_statistics_target: "100"
+    random_page_cost: "1.1"
+    effective_io_concurrency: "200"
+    work_mem: "4MB"
+    min_wal_size: "1GB"
+    max_wal_size: "4GB"
+  
+  handlers:
+    - name: Restart postgresql
+      service:
+        name: postgresql
+        state: restarted
+    
+    - name: Reload postgresql
+      service:
+        name: postgresql
+        state: reloaded
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags:
+        - install
+    
+    - name: Install PostgreSQL and dependencies
+      apt:
+        name:
+          - postgresql-{{ postgresql_version }}
+          - postgresql-contrib-{{ postgresql_version }}
+          - python3-psycopg2
+          - libpq-dev
+        state: present
+      tags:
+        - install
+    
+    - name: Ensure PostgreSQL is started and enabled
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+      tags:
+        - service
+    
+    - name: Configure PostgreSQL - shared_buffers
+      lineinfile:
+        path: "{{ postgresql_config_dir }}/postgresql.conf"
+        regexp: '^#?shared_buffers'
+        line: "shared_buffers = {{ shared_buffers }}"
+      notify: Restart postgresql
+      tags:
+        - config
+        - performance
+    
+    - name: Configure PostgreSQL - effective_cache_size
+      lineinfile:
+        path: "{{ postgresql_config_dir }}/postgresql.conf"
+        regexp: '^#?effective_cache_size'
+        line: "effective_cache_size = {{ effective_cache_size }}"
+      notify: Reload postgresql
+      tags:
+        - config
+        - performance
+    
+    - name: Configure PostgreSQL - maintenance_work_mem
+      lineinfile:
+        path: "{{ postgresql_config_dir }}/postgresql.conf"
+        regexp: '^#?maintenance_work_mem'
+        line: "maintenance_work_mem = {{ maintenance_work_mem }}"
+      notify: Reload postgresql
+      tags:
+        - config
+        - performance
+    
+    - name: Configure PostgreSQL - work_mem
+      lineinfile:
+        path: "{{ postgresql_config_dir }}/postgresql.conf"
+        regexp: '^#?work_mem'
+        line: "work_mem = {{ work_mem }}"
+      notify: Reload postgresql
+      tags:
+        - config
+        - performance
+    
+    - name: Enable password authentication for local connections
+      lineinfile:
+        path: "{{ postgresql_config_dir }}/pg_hba.conf"
+        regexp: '^local\s+all\s+all\s+peer'
+        line: 'local   all             all                                     md5'
+      notify: Reload postgresql
+      tags:
+        - config
+        - security
+    
+    - name: Allow password authentication from localhost
+      lineinfile:
+        path: "{{ postgresql_config_dir }}/pg_hba.conf"
+        regexp: '^host\s+all\s+all\s+127\.0\.0\.1/32\s+ident'
+        line: 'host    all             all             127.0.0.1/32            md5'
+      notify: Reload postgresql
+      tags:
+        - config
+        - security
+    
+    - name: Create database user
+      postgresql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        role_attr_flags: CREATEDB,NOSUPERUSER
+        state: present
+      become_user: postgres
+      no_log: true
+      tags:
+        - database
+        - users
+    
+    - name: Create application database
+      postgresql_db:
+        name: "{{ db_name }}"
+        owner: "{{ db_user }}"
+        encoding: UTF-8
+        lc_collate: en_US.UTF-8
+        lc_ctype: en_US.UTF-8
+        template: template0
+        state: present
+      become_user: postgres
+      tags:
+        - database
+    
+    - name: Grant all privileges on database to user
+      postgresql_privs:
+        database: "{{ db_name }}"
+        roles: "{{ db_user }}"
+        type: database
+        privs: ALL
+        state: present
+      become_user: postgres
+      tags:
+        - database
+        - permissions
+    
+    - name: Create database schema
+      postgresql_query:
+        db: "{{ db_name }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        query: |
+          CREATE TABLE IF NOT EXISTS users (
+              id SERIAL PRIMARY KEY,
+              username VARCHAR(50) UNIQUE NOT NULL,
+              email VARCHAR(100) UNIQUE NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          
+          CREATE TABLE IF NOT EXISTS posts (
+              id SERIAL PRIMARY KEY,
+              user_id INTEGER REFERENCES users(id),
+              title VARCHAR(200) NOT NULL,
+              content TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+      tags:
+        - database
+        - schema
+    
+    - name: Install PostgreSQL backup script
+      copy:
+        content: |
+          #!/bin/bash
+          # PostgreSQL Backup Script
+          
+          BACKUP_DIR=/var/backups/postgresql
+          DATE=$(date +%Y%m%d_%H%M%S)
+          
+          mkdir -p $BACKUP_DIR
+          
+          # Backup database
+          sudo -u postgres pg_dump {{ db_name }} | gzip > $BACKUP_DIR/{{ db_name }}_$DATE.sql.gz
+          
+          # Keep only last 7 days of backups
+          find $BACKUP_DIR -name "{{ db_name }}_*.sql.gz" -mtime +7 -delete
+          
+          echo "Backup completed: {{ db_name }}_$DATE.sql.gz"
+        dest: /usr/local/bin/backup-postgres.sh
+        owner: root
+        group: root
+        mode: '0755'
+      tags:
+        - backup
+    
+    - name: Create backup directory
+      file:
+        path: /var/backups/postgresql
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+      tags:
+        - backup
+    
+    - name: Configure daily backup cron job
+      cron:
+        name: "PostgreSQL daily backup"
+        minute: "0"
+        hour: "2"
+        job: "/usr/local/bin/backup-postgres.sh >> /var/log/postgresql-backup.log 2>&1"
+        user: root
+        state: present
+      tags:
+        - backup
+        - cron
+    
+    - name: Get PostgreSQL version
+      postgresql_query:
+        db: postgres
+        login_user: postgres
+        query: "SELECT version();"
+      become_user: postgres
+      register: pg_version
+      tags:
+        - verify
+    
+    - name: Display PostgreSQL version
+      debug:
+        msg: "{{ pg_version.query_result[0].version }}"
+      tags:
+        - verify
+    
+    - name: Test database connection
+      postgresql_query:
+        db: "{{ db_name }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        query: "SELECT current_database(), current_user;"
+      register: db_test
+      no_log: true
+      tags:
+        - verify
+    
+    - name: Display connection test results
+      debug:
+        msg: "Successfully connected to database '{{ db_test.query_result[0].current_database }}' as user '{{ db_test.query_result[0].current_user }}'"
+      tags:
+        - verify
+    
+    - name: Display database information
+      debug:
+        msg:
+          - "PostgreSQL installation complete!"
+          - "Database name: {{ db_name }}"
+          - "Database user: {{ db_user }}"
+          - "Configuration directory: {{ postgresql_config_dir }}"
+          - "Data directory: {{ postgresql_data_dir }}"
+          - "Backup script: /usr/local/bin/backup-postgres.sh"
+      tags:
+        - info
+
+# Use Cases:
+#   - Application database setup
+#   - Development environment database
+#   - Production database deployment
+#   - Database migration preparation
+#   - Automated backup configuration
